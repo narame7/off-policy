@@ -5,11 +5,11 @@ import time
 from offpolicy.runner.rnn.base_runner import RecRunner
 
 
-class MPERunner(RecRunner):
+class MagymRunner(RecRunner):
     """Runner class for Multiagent Particle Envs (MPE). See parent class for more information."""
 
     def __init__(self, config):
-        super(MPERunner, self).__init__(config)
+        super(MagymRunner, self).__init__(config)
         self.collecter = self.shared_collect_rollout if self.share_policy else self.separated_collect_rollout
         # fill replay buffer with random actions
         # fill replay buffer with random actions
@@ -109,7 +109,15 @@ class MPERunner(RecRunner):
 
             env_acts = np.split(acts_batch, self.num_envs)
             # env step and store the relevant episode information
-            next_obs, rewards, dones, infos = env.step(env_acts)
+
+            next_obs, rewards, dones, infos = env.step(np.array(env_acts).argmax(-1))
+
+            rewards = rewards[..., np.newaxis]
+
+            rewards = np.array([[sum(rewards[0]) for _ in range(self.num_agents)]])
+
+            dones = dones[..., np.newaxis]
+
             if training_episode:
                 self.total_env_steps += self.num_envs
 
@@ -266,6 +274,8 @@ class MPERunner(RecRunner):
                     env_act.append(last_acts[p_id][i, 0])
                 env_acts.append(env_act)
 
+            env_acts = np.array(env_acts).argmax(-1)
+
             # env step and store the relevant episode information
             next_obs, rewards, dones, infos = env.step(env_acts)
 
@@ -321,8 +331,7 @@ class MPERunner(RecRunner):
         """See parent class."""
         end = time.time()
         print(
-            "Env {} Algo {} Exp {} runs total num timesteps {}/{}, FPS {}.".format(
-                self.args.scenario_name,
+            "Algo {} Exp {} runs total num timesteps {}/{}, FPS {}.".format(
                 self.algorithm_name,
                 self.args.experiment_name,
                 self.total_env_steps,
