@@ -196,12 +196,10 @@ class RecPolicyBuffer(object):
         episode_length = acts.shape[0]
         assert episode_length == self.episode_length, "different dimension!"
 
-        number_insert_steps = num_insert_episodes * episode_length
-
         if self.current_i + num_insert_episodes <= self.buffer_size:
-            idx_range = np.arange(self.current_i, self.current_i + number_insert_steps)
+            idx_range = np.arange(self.current_i, self.current_i + num_insert_episodes)
         else:
-            num_left_episodes = self.current_i + number_insert_steps - self.buffer_size
+            num_left_episodes = self.current_i + num_insert_episodes - self.buffer_size
             idx_range = np.concatenate((np.arange(self.current_i, self.buffer_size), np.arange(num_left_episodes)))
 
         if self.use_same_share_obs:
@@ -308,7 +306,7 @@ class PrioritizedRecReplayBuffer(RecReplayBuffer):
         """See parent class."""
         idx_range = super().insert(num_insert_episodes, obs, share_obs, acts, rewards, dones, dones_env, avail_acts)
 
-        for idx in range(idx_range[0], idx_range[-1]):
+        for idx in idx_range:
             for p_id in self.policy_info.keys():
                 self._it_sums[p_id][idx] = self.max_priorities[p_id] ** self.alpha
                 self._it_mins[p_id][idx] = self.max_priorities[p_id] ** self.alpha

@@ -12,7 +12,7 @@ def get_config():
         choices=["rmatd3", "rmaddpg", "rmasac", "qmix", "vdn", "matd3", "maddpg", "masac", "mqmix", "mvdn"],
     )
     parser.add_argument("--experiment_name", type=str, default="check")
-    parser.add_argument("--seed", type=int, default=1, help="Random seed for numpy/torch")
+    parser.add_argument("--seed", type=int, default=10, help="Random seed for numpy/torch")
     parser.add_argument("--cuda", action="store_false", default=True)
     parser.add_argument("--cuda_deterministic", action="store_false", default=True)
     parser.add_argument("--n_training_threads", type=int, default=1, help="Number of torch threads for training")
@@ -185,7 +185,7 @@ def get_config():
     parser.add_argument(
         "--num_random_episodes",
         type=int,
-        default=50,
+        default=10,
         help="Number of episodes to add to buffer with purely random actions",
     )
     parser.add_argument(
@@ -197,7 +197,7 @@ def get_config():
     parser.add_argument(
         "--epsilon_anneal_time",
         type=int,
-        default=2000000,
+        default=4000,
         help="Number of episodes until epsilon reaches epsilon_finish",
     )
     parser.add_argument("--act_noise_std", type=float, default=0.1, help="Action noise")
