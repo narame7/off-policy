@@ -86,13 +86,6 @@ def parse_args(args, parser):
 
     all_args = parser.parse_known_args(args)[0]
 
-    all_args.use_wandb = False
-    all_args.env_name = "Checkers-v0"
-    all_args.algorithm_name = "rmaddpg"
-    all_args.user_name = "sangkiko"
-    all_args.n_rollout_threads = 1
-    all_args.use_centralized_V = True
-
     return all_args
 
 

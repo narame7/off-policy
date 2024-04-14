@@ -12,6 +12,7 @@ class VDNMixer(nn.Module):
     :param device: (torch.Device) torch device on which to do computations.
     :param multidiscrete_list: (list) list of each action dimension if action space is multidiscrete
     """
+
     def __init__(self, args, num_agents, cent_obs_dim, device, multidiscrete_list=None):
         """
         init mixer class
@@ -37,4 +38,6 @@ class VDNMixer(nn.Module):
         if type(agent_q_inps) == np.ndarray:
             agent_q_inps = torch.FloatTensor(agent_q_inps)
 
-        return agent_q_inps.sum(dim=-1).view(-1, 1, 1)
+        batch_size = agent_q_inps.size(1)
+
+        return agent_q_inps.sum(dim=-1).view(-1, batch_size, 1, 1)

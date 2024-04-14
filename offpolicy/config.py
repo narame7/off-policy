@@ -8,7 +8,7 @@ def get_config():
     parser.add_argument(
         "--algorithm_name",
         type=str,
-        default="rmatd3",
+        default="qmix",
         choices=["rmatd3", "rmaddpg", "rmasac", "qmix", "vdn", "matd3", "maddpg", "masac", "mqmix", "mvdn"],
     )
     parser.add_argument("--experiment_name", type=str, default="check")
@@ -27,26 +27,26 @@ def get_config():
         default=True,
         help="Whether to use weights&biases, if not, use tensorboardX instead",
     )
-    parser.add_argument("--user_name", type=str, default="zoeyuchao")
+    parser.add_argument("--user_name", type=str, default="sangkiko")
 
     # env parameters
-    parser.add_argument("--env_name", type=str, default="StarCraft2")
+    parser.add_argument("--env_name", type=str, default="Checkers-v0")
     parser.add_argument(
         "--use_obs_instead_of_state",
         action="store_true",
-        default=False,
+        default=True,
         help="Whether to use global state or concatenated obs",
     )
 
     # replay buffer parameters
-    parser.add_argument("--episode_length", type=int, default=80, help="Max length for any episode")
+    parser.add_argument("--episode_length", type=int, default=100, help="Max length for any episode")
     parser.add_argument(
-        "--buffer_size", type=int, default=5000, help="Max # of transitions that replay buffer can contain"
+        "--buffer_size", type=int, default=200000, help="Max # of transitions that replay buffer can contain"
     )
     parser.add_argument(
         "--use_reward_normalization",
         action="store_true",
-        default=False,
+        default=True,
         help="Whether to normalize rewards in replay buffer",
     )
     parser.add_argument(
@@ -58,7 +58,7 @@ def get_config():
 
     # prioritized experience replay
     parser.add_argument(
-        "--use_per", action="store_true", default=False, help="Whether to use prioritized experience replay"
+        "--use_per", action="store_true", default=True, help="Whether to use prioritized experience replay"
     )
     parser.add_argument("--per_nu", type=float, default=0.9, help="Weight of max TD error in formation of PER weights")
     parser.add_argument("--per_alpha", type=float, default=0.6, help="Alpha term for prioritized experience replay")
@@ -75,7 +75,7 @@ def get_config():
         "--share_policy", action="store_false", default=True, help="Whether agents share the same policy"
     )
     parser.add_argument(
-        "--hidden_size", type=int, default=64, help="Dimension of hidden layers for actor/critic networks"
+        "--hidden_size", type=int, default=32, help="Dimension of hidden layers for actor/critic networks"
     )
     parser.add_argument("--layer_N", type=int, default=1, help="Number of layers for actor/critic networks")
     parser.add_argument("--use_ReLU", action="store_false", default=True, help="Whether to use ReLU")
@@ -185,7 +185,7 @@ def get_config():
     parser.add_argument(
         "--num_random_episodes",
         type=int,
-        default=5,
+        default=50,
         help="Number of episodes to add to buffer with purely random actions",
     )
     parser.add_argument(
@@ -195,7 +195,10 @@ def get_config():
         "--epsilon_finish", type=float, default=0.05, help="Ending value for epsilon, for eps-greedy exploration"
     )
     parser.add_argument(
-        "--epsilon_anneal_time", type=int, default=50000, help="Number of episodes until epsilon reaches epsilon_finish"
+        "--epsilon_anneal_time",
+        type=int,
+        default=2000000,
+        help="Number of episodes until epsilon reaches epsilon_finish",
     )
     parser.add_argument("--act_noise_std", type=float, default=0.1, help="Action noise")
 
