@@ -6,8 +6,11 @@ from offpolicy.utils.util import huber_loss, mse_loss, to_torch
 from offpolicy.utils.popart import PopArt
 from offpolicy.algorithms.base.trainer import Trainer
 
+
 class R_MADDPG(Trainer):
-    def __init__(self, args, num_agents, policies, policy_mapping_fn, device=None, episode_length=None, actor_update_interval=1):
+    def __init__(
+        self, args, num_agents, policies, policy_mapping_fn, device=None, episode_length=None, actor_update_interval=1
+    ):
         """
         Trainer class for recurrent MADDPG/MATD3. See parent class for more information.
         :param episode_length: (int) maximum length of an episode.
@@ -31,14 +34,16 @@ class R_MADDPG(Trainer):
         self.policies = policies
         self.policy_mapping_fn = policy_mapping_fn
         self.policy_ids = sorted(list(self.policies.keys()))
-        self.policy_agents = {policy_id: sorted(
-            [agent_id for agent_id in range(self.num_agents) if self.policy_mapping_fn(agent_id) == policy_id]) for
-            policy_id in
-            self.policies.keys()}
+        self.policy_agents = {
+            policy_id: sorted(
+                [agent_id for agent_id in range(self.num_agents) if self.policy_mapping_fn(agent_id) == policy_id]
+            )
+            for policy_id in self.policies.keys()
+        }
         if self.use_popart:
             self.value_normalizer = {policy_id: PopArt(1) for policy_id in self.policies.keys()}
         self.actor_update_interval = actor_update_interval
-        self.num_updates = {p_id : 0 for p_id in self.policy_ids}
+        self.num_updates = {p_id: 0 for p_id in self.policy_ids}
         self.use_same_share_obs = self.args.use_same_share_obs
 
     def get_update_info(self, update_policy_id, obs_batch, act_batch, avail_act_batch):
@@ -83,11 +88,16 @@ class R_MADDPG(Trainer):
                     sum_act_dim = int(sum(policy.act_dim))
                 else:
                     sum_act_dim = policy.act_dim
-                batched_prev_act_seq = np.concatenate((np.zeros((1, total_batch_size, sum_act_dim), dtype=np.float32), batched_act_seq[:-1]))
-                pol_nact_seq, _, _ = policy.get_actions(batched_obs_seq,
-                                                        batched_prev_act_seq,
-                                                        policy.init_hidden(-1, total_batch_size),
-                                                        available_actions=batched_avail_act_seq, use_target=True)
+                batched_prev_act_seq = np.concatenate(
+                    (np.zeros((1, total_batch_size, sum_act_dim), dtype=np.float32), batched_act_seq[:-1])
+                )
+                pol_nact_seq, _, _ = policy.get_actions(
+                    batched_obs_seq,
+                    batched_prev_act_seq,
+                    policy.init_hidden(-1, total_batch_size),
+                    available_actions=batched_avail_act_seq,
+                    use_target=True,
+                )
                 # remove the first timestep for next actions
                 pol_nact_seq = pol_nact_seq[1:]
                 # separate the actions into individual agent actions
@@ -114,11 +124,17 @@ class R_MADDPG(Trainer):
     def shared_train_policy_on_batch(self, update_policy_id, batch):
         """Training function when all agents share the same centralized observation. See train_policy_on_batch."""
         # unpack the batch
-        obs_batch, cent_obs_batch, \
-        act_batch, rew_batch, \
-        dones_batch, dones_env_batch, \
-        avail_act_batch, \
-        importance_weights, idxes = batch
+        (
+            obs_batch,
+            cent_obs_batch,
+            act_batch,
+            rew_batch,
+            dones_batch,
+            dones_env_batch,
+            avail_act_batch,
+            importance_weights,
+            idxes,
+        ) = batch
 
         train_info = {}
 
@@ -129,7 +145,9 @@ class R_MADDPG(Trainer):
         update_policy = self.policies[update_policy_id]
         batch_size = obs_batch[update_policy_id].shape[2]
         total_batch_size = batch_size * num_update_agents
-        pol_act_dim = int(sum(update_policy.act_dim)) if isinstance(update_policy.act_dim, np.ndarray) else update_policy.act_dim
+        pol_act_dim = (
+            int(sum(update_policy.act_dim)) if isinstance(update_policy.act_dim, np.ndarray) else update_policy.act_dim
+        )
 
         rew_sequence = to_torch(rew_batch[update_policy_id][0]).to(**self.tpdv)
         # use numpy
@@ -150,17 +168,22 @@ class R_MADDPG(Trainer):
             pol_agents_avail_act_seq = np.concatenate(avail_act_batch[update_policy_id], axis=1)[:-1]
         else:
             pol_agents_avail_act_seq = None
-        pol_prev_buffer_act_seq = np.concatenate((np.zeros((1, total_batch_size, pol_act_dim), dtype=np.float32), np.concatenate(act_batch[update_policy_id][:, :-1], axis=1)))
-
+        pol_prev_buffer_act_seq = np.concatenate(
+            (
+                np.zeros((1, total_batch_size, pol_act_dim), dtype=np.float32),
+                np.concatenate(act_batch[update_policy_id][:, :-1], axis=1),
+            )
+        )
 
         # get centralized sequence information
-        cent_act_sequence_buffer, act_sequences, act_sequence_replace_ind_start, cent_nact_sequence = \
+        cent_act_sequence_buffer, act_sequences, act_sequence_replace_ind_start, cent_nact_sequence = (
             self.get_update_info(update_policy_id, obs_batch, act_batch, avail_act_batch)
-
+        )
 
         # Critic update:
-        predicted_Q_sequences, _ = update_policy.critic(cent_obs_sequence, cent_act_sequence_buffer,
-                                                       update_policy.init_hidden(-1, batch_size))
+        predicted_Q_sequences, _ = update_policy.critic(
+            cent_obs_sequence, cent_act_sequence_buffer, update_policy.init_hidden(-1, batch_size)
+        )
 
         # iterate over time to get target Qs since the history at each step should be formed from the buffer sequence
         next_Q_sequence = []
@@ -169,13 +192,13 @@ class R_MADDPG(Trainer):
             target_critic_rnn_state = update_policy.init_hidden(-1, batch_size)
             for t in range(self.episode_length):
                 # update the RNN states based on the buffer sequence
-                _, target_critic_rnn_state = update_policy.target_critic(cent_obs_sequence[t],
-                                                                         cent_act_sequence_buffer[t],
-                                                                         target_critic_rnn_state)
+                _, target_critic_rnn_state = update_policy.target_critic(
+                    cent_obs_sequence[t], cent_act_sequence_buffer[t], target_critic_rnn_state
+                )
                 # get the Q value using the next action taken by the target actor, but don't store the RNN state
-                next_Q_ts, _ = update_policy.target_critic(cent_nobs_sequence[t],
-                                                          cent_nact_sequence[t],
-                                                          target_critic_rnn_state)
+                next_Q_ts, _ = update_policy.target_critic(
+                    cent_nobs_sequence[t], cent_nact_sequence[t], target_critic_rnn_state
+                )
                 next_Q_t = torch.cat(next_Q_ts, dim=-1)
                 # take min to prevent overestimation bias
                 next_Q_t, _ = torch.min(next_Q_t, dim=-1, keepdim=True)
@@ -189,7 +212,8 @@ class R_MADDPG(Trainer):
 
         if self.use_popart:
             target_Q_sequence = rew_sequence + self.args.gamma * self.value_normalizer[update_policy_id].denormalize(
-                next_Q_sequence)
+                next_Q_sequence
+            )
             nodones_target_Q_sequence = target_Q_sequence[curr_env_dones == 0]
             target_Q_sequence[curr_env_dones == 0] = self.value_normalizer[update_policy_id](nodones_target_Q_sequence)
         else:
@@ -214,11 +238,17 @@ class R_MADDPG(Trainer):
 
             # new priorities are a combination of the maximum TD error across sequence and the mean TD error across sequence
             td_errors = [error.abs().cpu().detach().numpy() for error in errors]
-            new_priorities = [((1 - self.args.per_nu) * td_error.mean(axis=0) + self.args.per_nu * td_error.max(axis=0)).flatten() + self.per_eps for td_error in td_errors]
+            new_priorities = [
+                ((1 - self.args.per_nu) * td_error.mean(axis=0) + self.args.per_nu * td_error.max(axis=0)).flatten()
+                + self.per_eps
+                for td_error in td_errors
+            ]
             new_priorities = np.stack(new_priorities).mean(axis=0) + self.per_eps
         else:
             if self.use_huber_loss:
-                critic_loss = [huber_loss(error, self.huber_delta).sum() / (1 - curr_env_dones).sum() for error in errors]
+                critic_loss = [
+                    huber_loss(error, self.huber_delta).sum() / (1 - curr_env_dones).sum() for error in errors
+                ]
             else:
                 critic_loss = [mse_loss(error).sum() / (1 - curr_env_dones).sum() for error in errors]
             critic_loss = torch.stack(critic_loss).sum(dim=0)
@@ -226,12 +256,11 @@ class R_MADDPG(Trainer):
 
         update_policy.critic_optimizer.zero_grad()
         critic_loss.backward()
-        critic_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.critic.parameters(),
-                                                          self.args.max_grad_norm)
+        critic_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.critic.parameters(), self.args.max_grad_norm)
         update_policy.critic_optimizer.step()
 
-        train_info['critic_loss'] = critic_loss
-        train_info['critic_grad_norm'] = critic_grad_norm
+        train_info["critic_loss"] = critic_loss
+        train_info["critic_grad_norm"] = critic_grad_norm
 
         if update_actor:
             # Actor update
@@ -274,10 +303,13 @@ class R_MADDPG(Trainer):
             done_mask = torch.cat(done_mask, dim=1).to(**self.tpdv)
 
             # get all the actions from actor, with gumbel softmax to differentiate through the samples
-            policy_act_seq, _, _ = update_policy.get_actions(pol_agents_obs_seq, pol_prev_buffer_act_seq,
-                                                             update_policy.init_hidden(-1, total_batch_size),
-                                                             available_actions=pol_agents_avail_act_seq,
-                                                             use_gumbel=True)
+            policy_act_seq, _, _ = update_policy.get_actions(
+                pol_agents_obs_seq,
+                pol_prev_buffer_act_seq,
+                update_policy.init_hidden(-1, total_batch_size),
+                available_actions=pol_agents_avail_act_seq,
+                use_gumbel=True,
+            )
 
             # separate the output into individual agent act sequences
             agent_actor_seqs = policy_act_seq.split(split_size=batch_size, dim=1)
@@ -303,7 +335,9 @@ class R_MADDPG(Trainer):
                 Q_t, _ = update_policy.critic(stacked_cent_obs_seq[t], replaced_cent_act_batch, critic_rnn_state)
                 Q_t = Q_t[0]
                 # update the RNN state by stepping the RNN through with buffer sequence
-                _, critic_rnn_state = update_policy.critic(stacked_cent_obs_seq[t], batch_cent_acts[t], critic_rnn_state)
+                _, critic_rnn_state = update_policy.critic(
+                    stacked_cent_obs_seq[t], batch_cent_acts[t], critic_rnn_state
+                )
                 agent_Q_sequences.append(Q_t)
             # stack over time
             agent_Q_sequences = torch.stack(agent_Q_sequences)
@@ -315,17 +349,16 @@ class R_MADDPG(Trainer):
             update_policy.critic_optimizer.zero_grad()
             update_policy.actor_optimizer.zero_grad()
             actor_loss.backward()
-            actor_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.actor.parameters(),
-                                                             self.args.max_grad_norm)
+            actor_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.actor.parameters(), self.args.max_grad_norm)
             update_policy.actor_optimizer.step()
 
             # unfreeze the Q networks
             for p in update_policy.critic.parameters():
                 p.requires_grad = True
 
-            train_info['actor_grad_norm'] = actor_grad_norm
-            train_info['actor_loss'] = actor_loss
-        train_info['update_actor'] = update_actor
+            train_info["actor_grad_norm"] = actor_grad_norm
+            train_info["actor_loss"] = actor_loss
+        train_info["update_actor"] = update_actor
 
         self.num_updates[update_policy_id] += 1
         return train_info, new_priorities, idxes
@@ -333,11 +366,17 @@ class R_MADDPG(Trainer):
     def cent_train_policy_on_batch(self, update_policy_id, batch):
         """Training function when each agent has its own centralized observation. See train_policy_on_batch."""
         # unpack the batch
-        obs_batch, cent_obs_batch, \
-        act_batch, rew_batch, \
-        dones_batch, dones_env_batch, \
-        avail_act_batch, \
-        importance_weights, idxes = batch
+        (
+            obs_batch,
+            cent_obs_batch,
+            act_batch,
+            rew_batch,
+            dones_batch,
+            dones_env_batch,
+            avail_act_batch,
+            importance_weights,
+            idxes,
+        ) = batch
 
         train_info = {}
         update_actor = self.num_updates[update_policy_id] % self.actor_update_interval == 0
@@ -345,18 +384,21 @@ class R_MADDPG(Trainer):
         # obs_batch: dict mapping policy id to batches where each batch is shape (# agents, ep_len, batch_size, obs_dim)
         update_policy = self.policies[update_policy_id]
         batch_size = obs_batch[update_policy_id].shape[2]
-        pol_act_dim = int(sum(update_policy.act_dim)) if isinstance(update_policy.act_dim, np.ndarray) else update_policy.act_dim
+        pol_act_dim = (
+            int(sum(update_policy.act_dim)) if isinstance(update_policy.act_dim, np.ndarray) else update_policy.act_dim
+        )
         num_update_agents = len(self.policy_agents[update_policy_id])
         total_batch_size = batch_size * num_update_agents
 
         rew_sequence = to_torch(rew_batch[update_policy_id][0]).to(**self.tpdv)
         env_done_sequence = to_torch(dones_env_batch[update_policy_id]).to(**self.tpdv)
-        cent_obs_sequence = cent_obs_batch[update_policy_id][:-1]
-        cent_nobs_sequence = cent_obs_batch[update_policy_id][1:]
+        cent_obs_sequence = cent_obs_batch[update_policy_id][:, :-1]
+        cent_nobs_sequence = cent_obs_batch[update_policy_id][:, 1:]
         dones_sequence = dones_batch[update_policy_id]
         # get centralized sequence information
-        cent_act_sequence_buffer, act_sequences, act_sequence_replace_ind_start, cent_nact_sequence = \
+        cent_act_sequence_buffer, act_sequences, act_sequence_replace_ind_start, cent_nact_sequence = (
             self.get_update_info(update_policy_id, obs_batch, act_batch, avail_act_batch)
+        )
 
         # combine all agents data into one array/tensor by stacking along batch dim; easier to process
 
@@ -364,10 +406,13 @@ class R_MADDPG(Trainer):
         all_agent_cent_nobs = np.concatenate(cent_nobs_sequence, axis=1)
         all_agent_dones = np.concatenate(dones_sequence, axis=1)
 
-
         pol_agents_obs_seq = np.concatenate(obs_batch[update_policy_id], axis=1)[:-1]
-        pol_prev_buffer_act_seq = np.concatenate((np.zeros((1, total_batch_size, pol_act_dim), dtype=np.float32),
-                                                  np.concatenate(act_batch[update_policy_id][:, :-1], axis=1)))
+        pol_prev_buffer_act_seq = np.concatenate(
+            (
+                np.zeros((1, total_batch_size, pol_act_dim), dtype=np.float32),
+                np.concatenate(act_batch[update_policy_id][:, :-1], axis=1),
+            )
+        )
         if avail_act_batch[update_policy_id] is not None:
             pol_agents_avail_act_seq = np.concatenate(avail_act_batch[update_policy_id], axis=1)[:-1]
         else:
@@ -382,8 +427,9 @@ class R_MADDPG(Trainer):
         next_steps_dones = all_env_dones[:-1, :, :]
         curr_env_dones = torch.cat((first_step_dones, next_steps_dones), dim=0)
 
-        predicted_Q_sequences, _ = update_policy.critic(all_agent_cent_obs, all_agent_cent_act_buffer,
-                                                       update_policy.init_hidden(-1, total_batch_size))
+        predicted_Q_sequences, _ = update_policy.critic(
+            all_agent_cent_obs, all_agent_cent_act_buffer, update_policy.init_hidden(-1, total_batch_size)
+        )
         # iterate over time to get target Qs since history at each step should be formed from the buffer sequence
         next_Q_sequence = []
         # don't track gradients for target computation
@@ -391,13 +437,13 @@ class R_MADDPG(Trainer):
             target_critic_rnn_state = update_policy.init_hidden(-1, total_batch_size)
             for t in range(self.episode_length):
                 # update the RNN states based on the buffer sequence
-                _, target_critic_rnn_state = update_policy.target_critic(all_agent_cent_obs[t],
-                                                                         all_agent_cent_act_buffer[t],
-                                                                         target_critic_rnn_state)
+                _, target_critic_rnn_state = update_policy.target_critic(
+                    all_agent_cent_obs[t], all_agent_cent_act_buffer[t], target_critic_rnn_state
+                )
                 # get the next value using next action taken by the target actor, but don't store the RNN state
-                next_Q_ts, _ = update_policy.target_critic(all_agent_cent_nobs[t],
-                                                          all_agent_cent_nact[t],
-                                                          target_critic_rnn_state)
+                next_Q_ts, _ = update_policy.target_critic(
+                    all_agent_cent_nobs[t], all_agent_cent_nact[t], target_critic_rnn_state
+                )
                 next_Q_t = torch.cat(next_Q_ts, dim=-1)
                 next_Q_t, _ = torch.min(next_Q_t, dim=-1, keepdim=True)
                 next_Q_sequence.append(next_Q_t)
@@ -405,8 +451,9 @@ class R_MADDPG(Trainer):
         next_Q_sequence = torch.stack(next_Q_sequence)
         next_Q_sequence = (1 - all_env_dones) * next_Q_sequence
         if self.use_popart:
-            target_Q_sequence = all_agent_rewards + self.args.gamma * \
-                                self.value_normalizer[update_policy_id].denormalize(next_Q_sequence)
+            target_Q_sequence = all_agent_rewards + self.args.gamma * self.value_normalizer[
+                update_policy_id
+            ].denormalize(next_Q_sequence)
             nodones_target_Q_sequence = target_Q_sequence[curr_env_dones == 0]
             target_Q_sequence[curr_env_dones == 0] = self.value_normalizer[update_policy_id](nodones_target_Q_sequence)
         else:
@@ -433,24 +480,38 @@ class R_MADDPG(Trainer):
             agent_importance_weight_critic_loss = [loss * agent_importance_weights for loss in per_batch_critic_loss]
 
             if self.use_value_active_masks:
-                critic_loss = [loss.sum() / ((1 - curr_env_dones) * (1 - curr_agent_dones)).sum() for loss in agent_importance_weight_critic_loss]
+                critic_loss = [
+                    loss.sum() / ((1 - curr_env_dones) * (1 - curr_agent_dones)).sum()
+                    for loss in agent_importance_weight_critic_loss
+                ]
             else:
                 critic_loss = [loss.sum() / (1 - curr_env_dones).sum() for loss in agent_importance_weight_critic_loss]
 
             td_errors = [error.abs().cpu().detach().numpy() for error in errors]
-            agent_new_priorities = [((1 - self.args.per_nu) * td_error.mean(axis=0) + self.args.per_nu * td_error.max(
-                axis=0)).flatten() for td_error in td_errors]
+            agent_new_priorities = [
+                ((1 - self.args.per_nu) * td_error.mean(axis=0) + self.args.per_nu * td_error.max(axis=0)).flatten()
+                for td_error in td_errors
+            ]
+            critic_loss = torch.stack(critic_loss).sum(dim=0)
             new_priorities = np.stack(agent_new_priorities).mean(axis=0) + self.per_eps
         else:
             if self.use_huber_loss:
                 if self.use_value_active_masks:
-                    critic_loss = [huber_loss(error, self.huber_delta).sum() / (
-                                (1 - curr_env_dones) * (1 - curr_agent_dones)).sum() for error in errors]
+                    critic_loss = [
+                        huber_loss(error, self.huber_delta).sum()
+                        / ((1 - curr_env_dones) * (1 - curr_agent_dones)).sum()
+                        for error in errors
+                    ]
                 else:
-                    critic_loss = [huber_loss(error, self.huber_delta).sum() / (1 - curr_env_dones).sum() for error in errors]
+                    critic_loss = [
+                        huber_loss(error, self.huber_delta).sum() / (1 - curr_env_dones).sum() for error in errors
+                    ]
             else:
                 if self.use_value_active_masks:
-                    critic_loss = [mse_loss(error).sum() / ((1 - curr_env_dones) * (1 - curr_agent_dones)).sum() for error in errors]
+                    critic_loss = [
+                        mse_loss(error).sum() / ((1 - curr_env_dones) * (1 - curr_agent_dones)).sum()
+                        for error in errors
+                    ]
                 else:
                     critic_loss = [mse_loss(error).sum() / (1 - curr_env_dones).sum() for error in errors]
             critic_loss = torch.stack(critic_loss).sum(dim=0)
@@ -458,11 +519,10 @@ class R_MADDPG(Trainer):
 
         update_policy.critic_optimizer.zero_grad()
         critic_loss.backward()
-        critic_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.critic.parameters(),
-                                                          self.args.max_grad_norm)
+        critic_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.critic.parameters(), self.args.max_grad_norm)
         update_policy.critic_optimizer.step()
-        train_info['critic_loss'] = critic_loss
-        train_info['critic_grad_norm'] = critic_grad_norm
+        train_info["critic_loss"] = critic_loss
+        train_info["critic_grad_norm"] = critic_grad_norm
 
         if update_actor:
             # actor update: can form losses for each agent that the update policy controls
@@ -500,7 +560,9 @@ class R_MADDPG(Trainer):
                     done_mask.append(agent_done_sequence)
                 else:
                     agent_done_sequence = to_torch(dones_batch[update_policy_id][i])
-                    agent_first_step_dones = torch.zeros((1, agent_done_sequence.shape[1], agent_done_sequence.shape[2]))
+                    agent_first_step_dones = torch.zeros(
+                        (1, agent_done_sequence.shape[1], agent_done_sequence.shape[2])
+                    )
                     agent_next_steps_dones = agent_done_sequence[: self.episode_length - 1, :, :]
                     curr_agent_dones = torch.cat((agent_first_step_dones, agent_next_steps_dones), dim=0)
                     done_mask.append(curr_agent_dones)
@@ -510,10 +572,13 @@ class R_MADDPG(Trainer):
             done_mask = torch.cat(done_mask, dim=1).to(**self.tpdv)
 
             # get all the actions from actor, with gumbel softmax to differentiate through the samples
-            policy_act_seq, _, _ = update_policy.get_actions(pol_agents_obs_seq, pol_prev_buffer_act_seq,
-                                                             update_policy.init_hidden(-1, total_batch_size),
-                                                             available_actions=pol_agents_avail_act_seq,
-                                                             use_gumbel=True)
+            policy_act_seq, _, _ = update_policy.get_actions(
+                pol_agents_obs_seq,
+                pol_prev_buffer_act_seq,
+                update_policy.init_hidden(-1, total_batch_size),
+                available_actions=pol_agents_avail_act_seq,
+                use_gumbel=True,
+            )
             # separate the output into individual agent act sequences
             agent_actor_seqs = policy_act_seq.split(split_size=batch_size, dim=1)
             # convert act sequences to torch, formulate centralized buffer action, and repeat as done above
@@ -549,18 +614,22 @@ class R_MADDPG(Trainer):
             update_policy.critic_optimizer.zero_grad()
             update_policy.actor_optimizer.zero_grad()
             actor_loss.backward()
-            actor_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.actor.parameters(),
-                                                             self.args.max_grad_norm)
+            actor_grad_norm = torch.nn.utils.clip_grad_norm_(update_policy.actor.parameters(), self.args.max_grad_norm)
             update_policy.actor_optimizer.step()
 
             # unfreeze the Q networks
             for p in update_policy.critic.parameters():
                 p.requires_grad = True
 
-            train_info['actor_grad_norm'] = actor_grad_norm
-            train_info['actor_loss'] = actor_loss
+            train_info["actor_grad_norm"] = actor_grad_norm
+            train_info["actor_loss"] = actor_loss
+
+        train_info["update_actor"] = update_actor
 
         self.num_updates[update_policy_id] += 1
+
+        idxes = np.tile(np.array(idxes), num_update_agents)
+
         return train_info, new_priorities, idxes
 
     def prep_training(self):

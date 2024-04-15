@@ -7,6 +7,7 @@ from tensorboardX import SummaryWriter
 from offpolicy.utils.rec_buffer import RecReplayBuffer, PrioritizedRecReplayBuffer
 from offpolicy.utils.util import DecayThenFlatSchedule
 
+
 class RecRunner(object):
     """Base class for training recurrent policies."""
 
@@ -17,7 +18,7 @@ class RecRunner(object):
         """
         self.args = config["args"]
         self.device = config["device"]
-        self.q_learning = ["qmix","vdn"]
+        self.q_learning = ["qmix", "vdn"]
 
         self.share_policy = self.args.share_policy
         self.algorithm_name = self.args.algorithm_name
@@ -49,8 +50,8 @@ class RecRunner(object):
         self.last_train_episode = 0  # last episode after which a gradient update was performed
         self.last_eval_T = 0  # last episode after which a eval run was conducted
         self.last_save_T = 0  # last epsiode after which the models were saved
-        self.last_log_T = 0 # last timestep after which information was logged
-        self.last_hard_update_episode = 0 # last episode after which target policy was updated to equal live policy
+        self.last_log_T = 0  # last timestep after which information was logged
+        self.last_hard_update_episode = 0  # last episode after which target policy was updated to equal live policy
 
         if config.__contains__("take_turn"):
             self.take_turn = config["take_turn"]
@@ -98,11 +99,11 @@ class RecRunner(object):
             self.save_dir = str(wandb.run.dir)
         else:
             self.run_dir = config["run_dir"]
-            self.log_dir = str(self.run_dir / 'logs')
+            self.log_dir = str(self.run_dir / "logs")
             if not os.path.exists(self.log_dir):
                 os.makedirs(self.log_dir)
             self.writter = SummaryWriter(self.log_dir)
-            self.save_dir = str(self.run_dir / 'models')
+            self.save_dir = str(self.run_dir / "models")
             if not os.path.exists(self.save_dir):
                 os.makedirs(self.save_dir)
 
@@ -111,13 +112,11 @@ class RecRunner(object):
             from offpolicy.algorithms.r_matd3.algorithm.rMATD3Policy import R_MATD3Policy as Policy
             from offpolicy.algorithms.r_matd3.r_matd3 import R_MATD3 as TrainAlgo
         elif self.algorithm_name == "rmaddpg":
-            assert self.actor_train_interval_step == 1, (
-                "rmaddpg only supports actor_train_interval_step=1.")
+            assert self.actor_train_interval_step == 1, "rmaddpg only supports actor_train_interval_step=1."
             from offpolicy.algorithms.r_maddpg.algorithm.rMADDPGPolicy import R_MADDPGPolicy as Policy
             from offpolicy.algorithms.r_maddpg.r_maddpg import R_MADDPG as TrainAlgo
         elif self.algorithm_name == "rmasac":
-            assert self.actor_train_interval_step == 1, (
-                "rmasac only support actor_train_interval_step=1.")
+            assert self.actor_train_interval_step == 1, "rmasac only support actor_train_interval_step=1."
             from offpolicy.algorithms.r_masac.algorithm.rMASACPolicy import R_MASACPolicy as Policy
             from offpolicy.algorithms.r_masac.r_masac import R_MASAC as TrainAlgo
         elif self.algorithm_name == "qmix":
@@ -128,9 +127,9 @@ class RecRunner(object):
             from offpolicy.algorithms.vdn.vdn import VDN as TrainAlgo
         else:
             raise NotImplementedError
-        
+
         self.collecter = self.collect_rollout
-        self.saver = self.save_q if self.algorithm_name in self.q_learning else self.save        
+        self.saver = self.save_q if self.algorithm_name in self.q_learning else self.save
         self.restorer = self.restore_q if self.algorithm_name in self.q_learning else self.restore
         self.train = self.batch_train_q if self.algorithm_name in self.q_learning else self.batch_train
 
@@ -140,43 +139,54 @@ class RecRunner(object):
             self.restorer()
 
         # initialize trainer class for updating policies
-        self.trainer = TrainAlgo(self.args, self.num_agents, self.policies, self.policy_mapping_fn,
-                                 device=self.device, episode_length=self.episode_length)
+        self.trainer = TrainAlgo(
+            self.args,
+            self.num_agents,
+            self.policies,
+            self.policy_mapping_fn,
+            device=self.device,
+            episode_length=self.episode_length,
+        )
 
         # map policy id to agent ids controlled by that policy
-        self.policy_agents = {policy_id: sorted(
-            [agent_id for agent_id in self.agent_ids if self.policy_mapping_fn(agent_id) == policy_id]) for policy_id in
-            self.policies.keys()}
+        self.policy_agents = {
+            policy_id: sorted(
+                [agent_id for agent_id in self.agent_ids if self.policy_mapping_fn(agent_id) == policy_id]
+            )
+            for policy_id in self.policies.keys()
+        }
 
-        self.policy_obs_dim = {
-            policy_id: self.policies[policy_id].obs_dim for policy_id in self.policy_ids}
-        self.policy_act_dim = {
-            policy_id: self.policies[policy_id].act_dim for policy_id in self.policy_ids}
+        self.policy_obs_dim = {policy_id: self.policies[policy_id].obs_dim for policy_id in self.policy_ids}
+        self.policy_act_dim = {policy_id: self.policies[policy_id].act_dim for policy_id in self.policy_ids}
         self.policy_central_obs_dim = {
-            policy_id: self.policies[policy_id].central_obs_dim for policy_id in self.policy_ids}
+            policy_id: self.policies[policy_id].central_obs_dim for policy_id in self.policy_ids
+        }
 
         num_train_episodes = (self.num_env_steps / self.episode_length) / (self.train_interval_episode)
-        self.beta_anneal = DecayThenFlatSchedule(
-            self.per_beta_start, 1.0, num_train_episodes, decay="linear")
+        self.beta_anneal = DecayThenFlatSchedule(self.per_beta_start, 1.0, num_train_episodes, decay="linear")
 
         if self.use_per:
-            self.buffer = PrioritizedRecReplayBuffer(self.per_alpha,
-                                                     self.policy_info,
-                                                     self.policy_agents,
-                                                     self.buffer_size,
-                                                     self.episode_length,
-                                                     self.use_same_share_obs,
-                                                     self.use_avail_acts,
-                                                     self.use_reward_normalization)
+            self.buffer = PrioritizedRecReplayBuffer(
+                self.per_alpha,
+                self.policy_info,
+                self.policy_agents,
+                self.buffer_size,
+                self.episode_length,
+                self.use_same_share_obs,
+                self.use_avail_acts,
+                self.use_reward_normalization,
+            )
         else:
-            self.buffer = RecReplayBuffer(self.policy_info,
-                                          self.policy_agents,
-                                          self.buffer_size,
-                                          self.episode_length,
-                                          self.use_same_share_obs,
-                                          self.use_avail_acts,
-                                          self.use_reward_normalization)
-    
+            self.buffer = RecReplayBuffer(
+                self.policy_info,
+                self.policy_agents,
+                self.buffer_size,
+                self.episode_length,
+                self.use_same_share_obs,
+                self.use_avail_acts,
+                self.use_reward_normalization,
+            )
+
     def run(self):
         """Collect a training episode and perform appropriate training, saving, logging, and evaluation steps."""
         # collect data
@@ -186,7 +196,9 @@ class RecRunner(object):
             self.env_infos[k].append(v)
 
         # train
-        if ((self.num_episodes_collected - self.last_train_episode) / self.train_interval_episode) >= 1 or self.last_train_episode == 0:
+        if (
+            (self.num_episodes_collected - self.last_train_episode) / self.train_interval_episode
+        ) >= 1 or self.last_train_episode == 0:
             self.train()
             self.total_train_steps += 1
             self.last_train_episode = self.num_episodes_collected
@@ -207,7 +219,7 @@ class RecRunner(object):
             self.last_eval_T = self.total_env_steps
 
         return self.total_env_steps
-    
+
     def warmup(self, num_warmup_episodes):
         """
         Fill replay buffer with enough episodes to begin training.
@@ -219,7 +231,7 @@ class RecRunner(object):
         print("warm up...")
         for _ in range((num_warmup_episodes // self.num_envs) + 1):
             env_info = self.collecter(explore=True, training_episode=False, warmup=True)
-            warmup_rewards.append(env_info['average_episode_rewards'])
+            warmup_rewards.append(env_info["average_episode_rewards"])
         warmup_reward = np.mean(warmup_rewards)
         print("warmup average episode rewards: {}".format(warmup_reward))
 
@@ -237,10 +249,14 @@ class RecRunner(object):
             else:
                 sample = self.buffer.sample(self.batch_size)
 
-            update_method = self.trainer.shared_train_policy_on_batch if self.use_same_share_obs else self.trainer.cent_train_policy_on_batch
-            
+            update_method = (
+                self.trainer.shared_train_policy_on_batch
+                if self.use_same_share_obs
+                else self.trainer.cent_train_policy_on_batch
+            )
+
             train_info, new_priorities, idxes = update_method(p_id, sample)
-            update_actor = train_info['update_actor']
+            update_actor = train_info["update_actor"]
 
             if self.use_per:
                 self.buffer.update_priorities(idxes, new_priorities, p_id)
@@ -287,40 +303,37 @@ class RecRunner(object):
         """Save all policies to the path specified by the config."""
         for pid in self.policy_ids:
             policy_critic = self.policies[pid].critic
-            critic_save_path = self.save_dir + '/' + str(pid)
+            critic_save_path = self.save_dir + "/" + str(pid)
             if not os.path.exists(critic_save_path):
                 os.makedirs(critic_save_path)
-            torch.save(policy_critic.state_dict(),
-                       critic_save_path + '/critic.pt')
+            torch.save(policy_critic.state_dict(), critic_save_path + "/critic.pt")
 
             policy_actor = self.policies[pid].actor
-            actor_save_path = self.save_dir + '/' + str(pid)
+            actor_save_path = self.save_dir + "/" + str(pid)
             if not os.path.exists(actor_save_path):
                 os.makedirs(actor_save_path)
-            torch.save(policy_actor.state_dict(),
-                       actor_save_path + '/actor.pt')
+            torch.save(policy_actor.state_dict(), actor_save_path + "/actor.pt")
 
     def save_q(self):
         """Save all policies to the path specified by the config. Used for QMix and VDN."""
         for pid in self.policy_ids:
             policy_Q = self.policies[pid].q_network
-            p_save_path = self.save_dir + '/' + str(pid)
+            p_save_path = self.save_dir + "/" + str(pid)
             if not os.path.exists(p_save_path):
                 os.makedirs(p_save_path)
-            torch.save(policy_Q.state_dict(), p_save_path + '/q_network.pt')
+            torch.save(policy_Q.state_dict(), p_save_path + "/q_network.pt")
 
         if not os.path.exists(self.save_dir):
             os.makedirs(self.save_dir)
-        torch.save(self.trainer.mixer.state_dict(),
-                   self.save_dir + '/mixer.pt')
+        torch.save(self.trainer.mixer.state_dict(), self.save_dir + "/mixer.pt")
 
     def restore(self):
         """Load policies policies from pretrained models specified by path in config."""
         for pid in self.policy_ids:
             path = str(self.model_dir) + str(pid)
             print("load the pretrained model from {}".format(path))
-            policy_critic_state_dict = torch.load(path + '/critic.pt')
-            policy_actor_state_dict = torch.load(path + '/actor.pt')
+            policy_critic_state_dict = torch.load(path + "/critic.pt")
+            policy_actor_state_dict = torch.load(path + "/actor.pt")
 
             self.policies[pid].critic.load_state_dict(policy_critic_state_dict)
             self.policies[pid].actor.load_state_dict(policy_actor_state_dict)
@@ -330,10 +343,10 @@ class RecRunner(object):
         for pid in self.policy_ids:
             path = str(self.model_dir) + str(pid)
             print("load the pretrained model from {}".format(path))
-            policy_q_state_dict = torch.load(path + '/q_network.pt')           
+            policy_q_state_dict = torch.load(path + "/q_network.pt")
             self.policies[pid].q_network.load_state_dict(policy_q_state_dict)
-            
-        policy_mixer_state_dict = torch.load(str(self.model_dir) + '/mixer.pt')
+
+        policy_mixer_state_dict = torch.load(str(self.model_dir) + "/mixer.pt")
         self.trainer.mixer.load_state_dict(policy_mixer_state_dict)
 
     def log(self):
@@ -348,12 +361,12 @@ class RecRunner(object):
         """
         Log information related to the environment.
         :param env_info: (dict) contains logging information related to the environment.
-        :param suffix: (str) optional string to add to end of keys in env_info when logging. 
+        :param suffix: (str) optional string to add to end of keys in env_info when logging.
         """
         for k, v in env_info.items():
             if len(v) > 0:
                 v = np.mean(v)
-                suffix_k = k if suffix is None else suffix + k 
+                suffix_k = k if suffix is None else suffix + k
                 print(suffix_k + " is " + str(v))
                 if self.use_wandb:
                     wandb.log({suffix_k: v}, step=self.total_env_steps)
@@ -367,7 +380,7 @@ class RecRunner(object):
         :param train_info: (dict) contains logging information related to training.
         """
         for k, v in train_info.items():
-            policy_k = str(policy_id) + '/' + k
+            policy_k = str(policy_id) + "/" + k
             if self.use_wandb:
                 wandb.log({policy_k: v}, step=self.total_env_steps)
             else:

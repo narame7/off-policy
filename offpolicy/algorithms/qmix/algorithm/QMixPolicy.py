@@ -3,7 +3,16 @@ import torch
 from offpolicy.algorithms.qmix.algorithm.agent_q_function import AgentQFunction
 from offpolicy.algorithms.base.recurrent_policy import RecurrentPolicy
 from torch.distributions import Categorical, OneHotCategorical
-from offpolicy.utils.util import get_dim_from_space, is_discrete, is_multidiscrete, make_onehot, DecayThenFlatSchedule, avail_choose, to_torch, to_numpy
+from offpolicy.utils.util import (
+    get_dim_from_space,
+    is_discrete,
+    is_multidiscrete,
+    make_onehot,
+    DecayThenFlatSchedule,
+    avail_choose,
+    to_torch,
+    to_numpy,
+)
 
 
 class QMixPolicy(RecurrentPolicy):
@@ -15,7 +24,7 @@ class QMixPolicy(RecurrentPolicy):
         :param train: (bool) whether the policy will be trained.
         """
         self.args = config["args"]
-        self.device = config['device']
+        self.device = config["device"]
         self.obs_space = policy_config["obs_space"]
         self.obs_dim = get_dim_from_space(self.obs_space)
         self.act_space = policy_config["act_space"]
@@ -36,8 +45,9 @@ class QMixPolicy(RecurrentPolicy):
         self.q_network = AgentQFunction(self.args, self.q_network_input_dim, self.act_dim, self.device)
 
         if train:
-            self.exploration = DecayThenFlatSchedule(self.args.epsilon_start, self.args.epsilon_finish, self.args.epsilon_anneal_time,
-                                                  decay="linear")
+            self.exploration = DecayThenFlatSchedule(
+                self.args.epsilon_start, self.args.epsilon_finish, self.args.epsilon_anneal_time, decay="linear"
+            )
 
     def get_q_values(self, obs_batch, prev_action_batch, rnn_states, action_batch=None):
         """
@@ -52,7 +62,8 @@ class QMixPolicy(RecurrentPolicy):
 
         # combine previous action with observation for input into q, if specified in args
         if self.args.prev_act_inp:
-            prev_action_batch = to_torch(prev_action_batch)
+            prev_action_batch = to_torch(prev_action_batch).to(self.device)
+            obs_batch = to_torch(obs_batch).to(self.device)
             input_batch = torch.cat((obs_batch, prev_action_batch), dim=-1)
         else:
             input_batch = obs_batch
@@ -78,7 +89,7 @@ class QMixPolicy(RecurrentPolicy):
             all_q_values = []
             for i in range(len(self.act_dim)):
                 curr_q_batch = q_batch[i]
-                curr_action_portion = action_batch[:, :, ind: ind + self.act_dim[i]]
+                curr_action_portion = action_batch[:, :, ind : ind + self.act_dim[i]]
                 curr_action_inds = curr_action_portion.max(dim=-1)[1]
                 curr_q_values = torch.gather(curr_q_batch, 2, curr_action_inds.unsqueeze(dim=-1))
                 all_q_values.append(curr_q_values)
@@ -95,8 +106,10 @@ class QMixPolicy(RecurrentPolicy):
     def get_actions(self, obs, prev_actions, rnn_states, available_actions=None, t_env=None, explore=False):
         """See parent class."""
         q_values_out, new_rnn_states = self.get_q_values(obs, prev_actions, rnn_states)
-        onehot_actions, greedy_Qs = self.actions_from_q(q_values_out, available_actions=available_actions, explore=explore, t_env=t_env)
-        
+        onehot_actions, greedy_Qs = self.actions_from_q(
+            q_values_out, available_actions=available_actions, explore=explore, t_env=t_env
+        )
+
         return onehot_actions, new_rnn_states, greedy_Qs
 
     def actions_from_q(self, q_values, available_actions=None, explore=False, t_env=None):
@@ -178,8 +191,10 @@ class QMixPolicy(RecurrentPolicy):
         batch_size = obs.shape[0]
 
         if self.multidiscrete:
-            random_actions = [OneHotCategorical(logits=torch.ones(batch_size, self.act_dim[i])).sample().numpy() for i in
-                                range(len(self.act_dim))]
+            random_actions = [
+                OneHotCategorical(logits=torch.ones(batch_size, self.act_dim[i])).sample().numpy()
+                for i in range(len(self.act_dim))
+            ]
             random_actions = np.concatenate(random_actions, axis=-1)
         else:
             if available_actions is not None:
@@ -187,7 +202,7 @@ class QMixPolicy(RecurrentPolicy):
                 random_actions = OneHotCategorical(logits=logits).sample().numpy()
             else:
                 random_actions = OneHotCategorical(logits=torch.ones(batch_size, self.act_dim)).sample().numpy()
-        
+
         return random_actions
 
     def init_hidden(self, num_agents, batch_size):

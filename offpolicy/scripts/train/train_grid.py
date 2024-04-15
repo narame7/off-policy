@@ -81,7 +81,7 @@ def make_eval_env(all_args):
 def parse_args(args, parser):
     parser.add_argument("--num_agents", type=int, default=2, help="number of players")
     parser.add_argument(
-        "--use_same_share_obs", action="store_false", default=True, help="Whether to use available actions"
+        "--use_same_share_obs", action="store_false", default=False, help="Whether to use available actions"
     )
 
     all_args = parser.parse_known_args(args)[0]

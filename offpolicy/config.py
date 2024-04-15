@@ -101,7 +101,7 @@ def get_config():
     parser.add_argument(
         "--prev_act_inp",
         action="store_true",
-        default=False,
+        default=True,
         help="Whether the actor input takes in previous actions as part of its input",
     )
     parser.add_argument("--use_rnn_layer", action="store_false", default=True, help="Whether to use a recurrent policy")
