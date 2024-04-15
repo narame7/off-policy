@@ -197,7 +197,7 @@ def get_config():
     parser.add_argument(
         "--epsilon_anneal_time",
         type=int,
-        default=4000,
+        default=400000,
         help="Number of episodes until epsilon reaches epsilon_finish",
     )
     parser.add_argument("--act_noise_std", type=float, default=0.1, help="Action noise")

@@ -89,7 +89,7 @@ class R_MADDPG(Trainer):
                 else:
                     sum_act_dim = policy.act_dim
                 batched_prev_act_seq = np.concatenate(
-                    (np.zeros((1, total_batch_size, sum_act_dim), dtype=np.float32), batched_act_seq[:-1])
+                    (np.zeros((1, total_batch_size, sum_act_dim), dtype=np.float32), batched_act_seq)
                 )
                 pol_nact_seq, _, _ = policy.get_actions(
                     batched_obs_seq,
